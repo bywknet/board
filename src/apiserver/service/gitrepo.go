@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"gopkg.in/src-d/go-git.v4/config"
 	"gopkg.in/src-d/go-git.v4/plumbing"
 
 	"gopkg.in/src-d/go-git.v4/plumbing/object"
@@ -116,6 +117,14 @@ func getWorktree(repo *git.Repository) (*git.Worktree, error) {
 	return worktree, nil
 }
 
+func (r *repoHandler) CreateRemote(name string, url string) (*repoHandler, error) {
+	_, err := r.repo.CreateRemote(&config.RemoteConfig{Name: name, URLs: []string{url}})
+	if err != nil {
+		return nil, err
+	}
+	return r, nil
+}
+
 func (r *repoHandler) ToRemove() *repoHandler {
 	r.isRemove = true
 	return r
@@ -174,16 +183,38 @@ func (r *repoHandler) Push() error {
 	return r.repo.Push(&git.PushOptions{Auth: auth})
 }
 
-func (r *repoHandler) Pull() error {
-	auth, err := getSSHAuth(r.username)
-	if err != nil {
-		return err
+func (r *repoHandler) Pull(remoteName string, isAuthRequired bool) error {
+	pullOption := &git.PullOptions{RemoteName: remoteName, Force: true}
+	if isAuthRequired {
+		auth, err := getSSHAuth(r.username)
+		if err != nil {
+			return err
+		}
+		pullOption.Auth = auth
+
 	}
-	err = r.worktree.Pull(&git.PullOptions{Auth: auth})
+	err := r.worktree.Pull(pullOption)
+	if err == transport.ErrEmptyRemoteRepository {
+		logs.Warn("Empty remote repository: %+v", err)
+		return nil
+	}
 	if err == git.NoErrAlreadyUpToDate {
+		logs.Warn("Repository already up to date: %+v", err)
 		return nil
 	}
 	return err
+}
+
+func (r *repoHandler) PullUpstream() error {
+	return r.Pull("upstream", false)
+}
+
+func (r *repoHandler) PullHttpOrigin() error {
+	return r.Pull("origin-http", false)
+}
+
+func (r *repoHandler) PullOrigin() error {
+	return r.Pull("origin", true)
 }
 
 func (r *repoHandler) Remove(filename string) (*repoHandler, error) {
@@ -209,9 +240,7 @@ func (r *repoHandler) SimplePush(items ...string) error {
 	if r.isRemove {
 		message = "[DELETED]" + message
 	}
-
-	var err error
-	_, err = r.Commit(message)
+	_, err := r.Commit(message)
 	if err != nil {
 		return fmt.Errorf("failed to commit changes to user's repo: %+v", err)
 	}

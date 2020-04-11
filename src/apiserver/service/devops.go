@@ -16,6 +16,7 @@ import (
 )
 
 var BaseRepoPath = utils.GetConfig("BASE_REPO_PATH")
+var GogitsBaseURL = utils.GetConfig("GOGITS_BASE_URL")
 var GogitsSSHURL = utils.GetConfig("GOGITS_SSH_URL")
 var JenkinsBaseURL = utils.GetConfig("JENKINS_BASE_URL")
 var jenkinsNodeIP = utils.GetConfig("JENKINS_NODE_IP")
@@ -75,7 +76,6 @@ func CreateRepoAndJob(userID int64, projectName string) error {
 	if err != nil {
 		logs.Error("Failed to create hook to repo: %s, error: %+v", repoName, err)
 	}
-
 	project, err := GetProjectByName(projectName)
 	if err != nil {
 		return fmt.Errorf("failed to get project: %+v", err)
@@ -88,9 +88,7 @@ func CreateRepoAndJob(userID int64, projectName string) error {
 	if err != nil {
 		logs.Error("Failed to create hook to repo: %s, error: %+v", repoName, err)
 	}
-
 	CreateFile("readme.md", "Repo created by Board.", repoPath)
-
 	repoHandler, err := OpenRepo(repoPath, username, email)
 	if err != nil {
 		logs.Error("Failed to open the repo: %s, error: %+v.", repoPath, err)
@@ -161,9 +159,7 @@ func ForkRepo(forkedUser *model.User, baseRepoName string) error {
 		logs.Error("Failed to initialize project repo: %+v", err)
 		return err
 	}
-
 	CreateFile("readme.md", "Repo created by Board.", repoPath)
-
 	repoHandler, err := OpenRepo(repoPath, username, email)
 	if err != nil {
 		logs.Error("Failed to open the repo: %s, error: %+v.", repoPath, err)
@@ -175,6 +171,7 @@ func ForkRepo(forkedUser *model.User, baseRepoName string) error {
 		logs.Error("Failed to push readme.md file to the repo: %+v", err)
 		return err
 	}
+	repoHandler.CreateRemote("upstream", fmt.Sprintf("%s/%s/%s.git", GogitsBaseURL(), project.OwnerName, baseRepoName))
 
 	jenkinsHandler := jenkins.NewJenkinsHandler()
 	err = jenkinsHandler.CreateJobWithParameter(repoName)

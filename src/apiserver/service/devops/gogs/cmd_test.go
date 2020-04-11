@@ -126,7 +126,7 @@ func TestGogitsCreatePullRequest(t *testing.T) {
 	repoHandler, err := service.InitRepo(fmt.Sprintf("%s/%s/%s.git", gogitsRepoURL(), user2.Username, forkedRepoName), user2.Username, user2.Email, filepath.Join(repoPath(), user2.Username))
 	assert.Nilf(err, "Failed to initialize repo: %+v", err)
 
-	err = repoHandler.Pull()
+	err = repoHandler.Pull("origin", true)
 	assert.Nilf(err, "Failed to pull updates from repo: %+v", err)
 
 	service.CreateFile("test.txt", "This is another test file.", filepath.Join(repoPath(), user2.Username))

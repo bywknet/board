@@ -137,6 +137,7 @@ func (p *ServiceController) DeployServiceAction() {
 	serviceFile := filepath.Join(newservice.Name, serviceFilename)
 	items := []string{deploymentFile, serviceFile}
 	p.PushItemsToRepo(items...)
+	p.CollaborateWithPullRequest("master", "master", items...)
 
 	updateService := model.ServiceStatus{ID: serviceInfo.ID, Status: uncompleted, Type: service.GetServiceType(deployInfo.Service.Type), ServiceYaml: string(deployInfo.ServiceFileInfo),
 		DeploymentYaml: string(deployInfo.DeploymentFileInfo)}
@@ -408,6 +409,8 @@ func (p *ServiceController) ToggleServiceAction() {
 	}
 
 	p.ResolveRepoServicePath(s.ProjectName, s.Name)
+	p.PullItemsFromRepo()
+	p.PushItemsUnderPath(p.RepoServicePath)
 	if _, err := os.Stat(p.RepoServicePath); os.IsNotExist(err) {
 		p.CustomAbortAudit(http.StatusPreconditionFailed, "Service restored from initialization, cannot be switched.")
 		return

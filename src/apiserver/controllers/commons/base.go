@@ -2,6 +2,7 @@ package commons
 
 import (
 	"errors"
+	"io/ioutil"
 	"net/http"
 	"path/filepath"
 	"time"
@@ -362,7 +363,7 @@ func (b *BaseController) ResolveUserPrivilegeByID(projectID int64) (project *mod
 	return
 }
 
-func (b *BaseController) ManipulateRepo(items ...string) error {
+func (b *BaseController) manipulateRepo(action string, items ...string) error {
 	if b.RepoPath == "" {
 		return fmt.Errorf("repo path cannot be empty")
 	}
@@ -373,6 +374,12 @@ func (b *BaseController) ManipulateRepo(items ...string) error {
 		logs.Error("Failed to open repo: %+v", err)
 		return err
 	}
+	if action == "pull-upstream" {
+		return repoHandler.PullUpstream()
+	} else if action == "pull-origin" {
+		return repoHandler.PullOrigin()
+	}
+	logs.Debug("Push items to repo ...")
 	if b.IsRemoved {
 		repoHandler.ToRemove()
 	}
@@ -380,9 +387,36 @@ func (b *BaseController) ManipulateRepo(items ...string) error {
 }
 
 func (b *BaseController) PushItemsToRepo(items ...string) {
-	err := b.ManipulateRepo(items...)
+	err := b.manipulateRepo("push", items...)
 	if err != nil {
 		logs.Error("Failed to push items to repo: %s, error: %+v", b.RepoPath, err)
+		b.InternalError(err)
+	}
+}
+
+func (b *BaseController) PushItemsUnderPath(repoPath string) {
+	logs.Debug("Push items under path: %s", repoPath)
+	files, err := ioutil.ReadDir(repoPath)
+	if err != nil {
+		logs.Error("Failed to read directory: %s, error: %+v", repoPath, err)
+		b.InternalError(err)
+	}
+	fileNames := []string{}
+	for _, f := range files {
+		fileNames = append(fileNames, f.Name())
+	}
+	b.PushItemsToRepo(fileNames...)
+}
+
+func (b *BaseController) PullItemsFromRepo() {
+	if b.CurrentUser.Username == b.Project.OwnerName {
+		logs.Debug("Bypass pulling from upstream as it is current project owner, pull origin instead ...")
+		b.manipulateRepo("pull-origin")
+		return
+	}
+	err := b.manipulateRepo("pull-upstream")
+	if err != nil {
+		logs.Error("Failed to pull upstream from repo: %s, error: %+v", b.RepoPath, err)
 		b.InternalError(err)
 	}
 }
@@ -429,7 +463,7 @@ func (b *BaseController) CollaborateWithPullRequest(headBranch, baseBranch strin
 
 func (b *BaseController) RemoveItemsToRepo(items ...string) {
 	b.IsRemoved = true
-	err := b.ManipulateRepo(items...)
+	err := b.manipulateRepo("push", items...)
 	if err != nil {
 		logs.Error("Failed to remove items to repo: %s, error: %+v", b.RepoPath, err)
 		b.InternalError(err)
