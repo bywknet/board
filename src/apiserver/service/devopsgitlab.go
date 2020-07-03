@@ -9,10 +9,8 @@ import (
 	"git/inspursoft/board/src/common/utils"
 	"net/http"
 	"strings"
-	"sync"
 
 	"github.com/astaxie/beego/logs"
-	"golang.org/x/net/context"
 )
 
 var gitlabAdminToken = utils.GetConfig("GITLAB_ADMIN_TOKEN")
@@ -129,24 +127,10 @@ func (g GitlabDevOps) CreateRepoAndJob(userID int64, projectName string) error {
 	}
 	logs.Info("Initialize serve repo with name: %s ...", repoName)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	var wg sync.WaitGroup
-	wg.Add(1)
 	go func() {
-		select {
-		case <-ctx.Done():
-			if err := ctx.Err(); err != nil {
-				logs.Error("Failed to execute Gogits creation: %+v", err)
-				return
-			}
-			logs.Info("Successful create Gogits repo.")
-		}
 		gitlabHandler := gitlab.NewGitlabHandler(accessToken)
 		if gitlabHandler == nil {
 			logs.Error("failed to create Gitlab handler")
-			cancel()
 		}
 		userInfo := model.User{Username: user.Username, Email: user.Email, RepoToken: user.RepoToken}
 
@@ -154,7 +138,6 @@ func (g GitlabDevOps) CreateRepoAndJob(userID int64, projectName string) error {
 		projectCreation, err := gitlabHandler.CreateRepo(userInfo, projectInfo)
 		if err != nil {
 			logs.Error("Failed to create repo via Gitlab API, error %+v", err)
-			cancel()
 		}
 		logs.Debug("Successful created Gitlab project: %+v", projectCreation)
 		projectInfo.ID = int64(projectCreation.ID)
@@ -175,28 +158,15 @@ func (g GitlabDevOps) CreateRepoAndJob(userID int64, projectName string) error {
 		fileCreation, err := gitlabHandler.ManipulateFile("create", userInfo, projectInfo, "master", fileInfo)
 		if err != nil {
 			logs.Error("Failed to create file: %+v to the repo: %s, error: %+v", fileInfo, projectInfo.Name, err)
-			cancel()
 		}
 		logs.Debug("Successful created file: %+v to Gitlab repository: %s", fileCreation, projectInfo.Name)
 	}()
 
-	wg.Add(1)
 	go func() {
-		defer wg.Done()
-		select {
-		case <-ctx.Done():
-			if err := ctx.Err(); err != nil {
-				logs.Error("Failed to execute Jenkins job creation: %+v", err)
-				return
-			}
-			logs.Info("Successful create Jenkins job.")
-		}
-
 		jenkinsHandler := jenkins.NewJenkinsHandler()
 		err = jenkinsHandler.CreateJobWithParameter(repoName)
 		if err != nil {
 			logs.Error("Failed to create Jenkins' job with repo name: %s, error: %+v", repoName, err)
-			cancel()
 		}
 	}()
 	return nil
